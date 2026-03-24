@@ -1,0 +1,179 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+# =========================================================
+# 1. Baseline Parameterization for Scenario Analysis
+# =========================================================
+np.random.seed(42)
+
+alpha = 0.05   # Baseline advantage of innovation
+beta = 0.15    # Competitive erosion
+sigma = 0.40   # Macroeconomic volatility
+x0 = 0.10      # Initial proportion of innovating firms
+
+# Critical policy threshold from Theorem 2
+u_critical = sigma**2 / 2 - alpha
+
+# Time discretization
+T = 50.0
+dt = 0.01
+N_steps = int(T / dt) + 1
+t = np.linspace(0.0, T, N_steps)
+
+# Monte Carlo settings
+N_paths_plot = 50
+N_paths_stats = 5000
+
+# Policy scenarios
+scenarios = {
+    "Baseline trap regime ($u=0.00$)": 0.00,
+    "Insufficient intervention ($u=0.01$)": 0.01,
+    "Escape regime ($u=0.04$)": 0.04
+}
+
+# =========================================================
+# 2. Logit-Space Euler-Maruyama Simulation
+# =========================================================
+def logit(x):
+    return np.log(x / (1.0 - x))
+
+def logistic(y):
+    return 1.0 / (1.0 + np.exp(-y))
+
+def simulate_paths_logit(u, num_paths):
+    """
+    Simulate the controlled stochastic replicator dynamics using
+    the logit transformation y = log(x / (1-x)).
+
+    Model:
+        dx = x(1-x)[(alpha + u) - beta*x] dt + sigma*x(1-x) dW
+
+    Ito-transformed approximation in logit space:
+        dy ≈ [(alpha + u) - beta*x - sigma^2/2] dt + sigma dW
+    with x = logistic(y).
+    """
+    Y = np.zeros((num_paths, N_steps))
+    X = np.zeros((num_paths, N_steps))
+
+    y0 = logit(x0)
+    Y[:, 0] = y0
+    X[:, 0] = x0
+
+    for i in range(1, N_steps):
+        x_prev = logistic(Y[:, i - 1])
+        dW = np.sqrt(dt) * np.random.randn(num_paths)
+
+        drift_y = ((alpha + u) - beta * x_prev - 0.5 * sigma**2) * dt
+        diffusion_y = sigma * dW
+
+        Y[:, i] = Y[:, i - 1] + drift_y + diffusion_y
+        X[:, i] = logistic(Y[:, i])
+
+    return X
+
+# =========================================================
+# 3. Summary Statistics
+# =========================================================
+def compute_statistics(X):
+    """
+    Compute summary statistics from Monte Carlo sample paths.
+    """
+    mean_path = np.mean(X, axis=0)
+    q10 = np.quantile(X, 0.10, axis=0)
+    q90 = np.quantile(X, 0.90, axis=0)
+
+    terminal_values = X[:, -1]
+    terminal_mean = np.mean(terminal_values)
+    terminal_std = np.std(terminal_values)
+
+    extinction_prob = np.mean(terminal_values < 0.05)
+    persistence_prob = np.mean(terminal_values > 0.20)
+
+    long_run_mean = np.mean(X[:, int(0.8 * N_steps):])
+
+    return {
+        "mean_path": mean_path,
+        "q10": q10,
+        "q90": q90,
+        "terminal_values": terminal_values,
+        "terminal_mean": terminal_mean,
+        "terminal_std": terminal_std,
+        "extinction_prob": extinction_prob,
+        "persistence_prob": persistence_prob,
+        "long_run_mean": long_run_mean
+    }
+
+# =========================================================
+# 4. Generate Main Figure: Trajectories + Mean + Quantile Band
+# =========================================================
+fig, axes = plt.subplots(1, 3, figsize=(18, 5), sharey=True)
+fig.suptitle("Stochastic Evolutionary Dynamics of Innovation under Volatility", fontsize=15)
+
+results = {}
+
+for idx, (title, u) in enumerate(scenarios.items()):
+    ax = axes[idx]
+
+    # Light sample paths for visualization
+    X_plot = simulate_paths_logit(u, N_paths_plot)
+    for j in range(N_paths_plot):
+        ax.plot(t, X_plot[j, :], linewidth=0.8, alpha=0.12)
+
+    # Larger Monte Carlo batch for statistics
+    X_stats = simulate_paths_logit(u, N_paths_stats)
+    stats = compute_statistics(X_stats)
+    results[title] = stats
+
+    # Mean + uncertainty band
+    ax.fill_between(t, stats["q10"], stats["q90"], alpha=0.25, label="10%–90% band")
+    ax.plot(t, stats["mean_path"], linewidth=2.2, label="Estimated mean trajectory")
+
+    ax.set_title(title, fontsize=12)
+    ax.set_xlabel("Time")
+    ax.set_ylim(0.0, 1.0)
+    ax.grid(True, linestyle="--", alpha=0.5)
+
+    if idx == 0:
+        ax.set_ylabel("Share of innovating firms $x(t)$")
+        ax.legend(loc="upper left", fontsize=9)
+
+plt.tight_layout(rect=[0, 0.03, 1, 0.93])
+plt.show()
+
+# =========================================================
+# 5. Generate Secondary Figure: Terminal Distributions
+# =========================================================
+fig, axes = plt.subplots(1, 3, figsize=(18, 4), sharey=True)
+fig.suptitle("Terminal Distribution of Innovation Share at Time $T$", fontsize=15)
+
+for idx, (title, _) in enumerate(scenarios.items()):
+    ax = axes[idx]
+    terminal_values = results[title]["terminal_values"]
+    ax.hist(terminal_values, bins=30, density=True, alpha=0.7)
+    ax.set_title(title, fontsize=12)
+    ax.set_xlabel("$x(T)$")
+    ax.grid(True, linestyle="--", alpha=0.5)
+    if idx == 0:
+        ax.set_ylabel("Density")
+
+plt.tight_layout(rect=[0, 0.03, 1, 0.93])
+plt.show()
+
+# =========================================================
+# 6. Print Numerical Summary Table
+# =========================================================
+print("=" * 86)
+print(f"{'Scenario':40s} {'Mean x(T)':>10s} {'Std x(T)':>10s} {'P[x(T)<0.05]':>14s} {'P[x(T)>0.20]':>14s}")
+print("=" * 86)
+
+for title, stats in results.items():
+    print(
+        f"{title:40s} "
+        f"{stats['terminal_mean']:10.4f} "
+        f"{stats['terminal_std']:10.4f} "
+        f"{stats['extinction_prob']:14.4f} "
+        f"{stats['persistence_prob']:14.4f}"
+    )
+
+print("=" * 86)
+print(f"Critical intervention threshold from Theorem 2: u_c = {u_critical:.4f}")
