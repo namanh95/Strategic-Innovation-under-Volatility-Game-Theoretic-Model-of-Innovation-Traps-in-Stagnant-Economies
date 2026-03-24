@@ -1,0 +1,50 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Model parameters
+alpha = 0.05
+beta = 0.15
+sigma = 0.40
+
+# Critical threshold
+u_c = sigma**2 / 2 - alpha
+
+# Policy scenarios
+u_values = [0.00, 0.01, 0.04]
+labels = [
+'Baseline regime (u < u_c)',
+'Sub-critical intervention',
+'Escape regime (u > u_c)'
+]
+colors = ['red', 'orange', 'green']
+
+# State variable
+x = np.linspace(0, 1, 200)
+
+plt.figure(figsize=(10,6))
+
+for u, label, color in zip(u_values, labels, colors):
+    
+    drift = (alpha + u) - beta * x - (sigma**2 / 2)
+    
+    plt.plot(x, drift, color=color, linewidth=2.5, label=label)
+
+plt.axhline(0, color='black', linestyle='--', linewidth=1.5)
+
+plt.title('Drift structure of the stochastic innovation dynamics', fontsize=14)
+plt.xlabel('Innovation share $x$', fontsize=12)
+plt.ylabel(r'Drift $\mu(x)=E[dy_t \mid x]$', fontsize=12)
+
+plt.text(0.55, 0.015, 'Positive drift\n(innovation expansion)', 
+         fontsize=10, color='green', ha='center')
+
+plt.text(0.55, -0.06, 'Negative drift\n(imitation dominance)', 
+         fontsize=10, color='darkred', ha='center')
+
+plt.xlim(0,1)
+plt.ylim(-0.10,0.05)
+
+plt.grid(True, linestyle=':', alpha=0.7)
+plt.legend(loc='upper right')
+plt.tight_layout()
+plt.show()
