@@ -1,0 +1,56 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+# 1. Base parameters
+alpha = 0.05
+beta = 0.15
+
+# 2. Parameter space
+sigma_range = np.linspace(0.0, 0.60, 200)
+u_range = np.linspace(0.0, 0.10, 200)
+
+Sigma, U = np.meshgrid(sigma_range, u_range)
+
+# 3. Interior zero-drift level from the transformed dynamics
+# x_drift = [(alpha + u) - sigma^2/2] / beta
+X_drift = ((alpha + U) - (Sigma**2 / 2)) / beta
+
+# Restrict to feasible state space
+X_drift = np.clip(X_drift, 0.0, 1.0)
+
+# 4. Critical stabilization boundary
+u_critical = np.maximum(0.0, (sigma_range**2 / 2) - alpha)
+
+# 5. Plot
+plt.figure(figsize=(10, 7))
+
+contour = plt.contourf(Sigma, U, X_drift, levels=50, cmap='viridis', alpha=0.92)
+cbar = plt.colorbar(contour)
+cbar.set_label('Drift-neutral innovation share', fontsize=12)
+
+plt.plot(
+    sigma_range, u_critical,
+    color='white', linestyle='--', linewidth=3,
+    label=r'Critical threshold $u^*(\sigma)$'
+)
+
+# Region labels
+plt.text(
+    0.46, 0.02, 'Imitation-dominant region',
+    color='white', fontsize=12, fontweight='bold', ha='center'
+)
+plt.text(
+    0.16, 0.082, 'Innovation-persistent region',
+    color='black', fontsize=12, fontweight='bold', ha='center'
+)
+
+plt.title('Policy phase space for endogenous stabilization', fontsize=14)
+plt.xlabel(r'Macroeconomic volatility $\sigma$', fontsize=12)
+plt.ylabel(r'Policy intervention level $u$', fontsize=12)
+
+plt.xlim(0, 0.60)
+plt.ylim(0, 0.10)
+
+plt.legend(loc='upper left')
+plt.tight_layout()
+plt.show()
